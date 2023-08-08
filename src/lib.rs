@@ -11,7 +11,7 @@ cfg_if::cfg_if! {
         use x86_64 as arch;
     } else {
         mod arch {
-            use super::fallback as memset;
+            pub(crate) use super::fallback as memset;
         }
     }
 }
