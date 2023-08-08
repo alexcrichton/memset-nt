@@ -36,7 +36,12 @@ pub fn memset(slice: &mut [u8], byte: u8) {
 
     let ptr = get_impl().load(Ordering::Relaxed);
     let ptr = unsafe { mem::transmute::<usize, FnSig>(ptr) };
-    ptr(slice, byte)
+    ptr(slice, byte);
+
+    // Required before returning to code that may set atomic flags that invite concurrent reads,
+    // as LLVM will not lower `atomic store ... release`, thus `AtomicBool::store(true, Release)`
+    // on x86-64 to emit SFENCE, even though it is required in the presence of nontemporal stores.
+    unsafe { _mm_sfence() };
 }
 
 #[repr(packed)]
