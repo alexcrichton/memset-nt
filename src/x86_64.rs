@@ -37,11 +37,6 @@ pub fn memset(slice: &mut [u8], byte: u8) {
     let ptr = get_impl().load(Ordering::Relaxed);
     let ptr = unsafe { mem::transmute::<usize, FnSig>(ptr) };
     ptr(slice, byte);
-
-    // Required before returning to code that may set atomic flags that invite concurrent reads,
-    // as LLVM will not lower `atomic store ... release`, thus `AtomicBool::store(true, Release)`
-    // on x86-64 to emit SFENCE, even though it is required in the presence of nontemporal stores.
-    unsafe { _mm_sfence() };
 }
 
 #[repr(packed)]
@@ -68,6 +63,12 @@ unsafe fn memset_avx512f(slice: &mut [u8], byte: u8) {
         i += 1;
     }
     memset_small(suffix, byte);
+
+    // Required before returning to code that may set atomic flags that invite
+    // concurrent reads, as LLVM will not lower `atomic store ... release`, thus
+    // `AtomicBool::store(true, Release)` on x86-64 to emit SFENCE, even though
+    // it is required in the presence of nontemporal stores.
+    _mm_sfence();
 }
 
 #[target_feature(enable = "avx")]
@@ -88,6 +89,9 @@ unsafe fn memset_avx(slice: &mut [u8], byte: u8) {
         i += 1;
     }
     memset_small(suffix, byte);
+
+    // See comments in avx512f implementation
+    _mm_sfence();
 }
 
 unsafe fn memset_small(slice: &mut [u8], byte: u8) {
@@ -123,7 +127,11 @@ unsafe fn memset_sse2(slice: &mut [u8], byte: u8) {
         _mm_stream_si128(&mut body[i], pattern);
         i += 1;
     }
+
     super::fallback(suffix, byte);
+
+    // See comments in avx512f implementation
+    _mm_sfence();
 }
 
 #[cfg(test)]
